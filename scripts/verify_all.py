@@ -312,6 +312,81 @@ def check_models():
     return checks
 
 
+def check_phase5():
+    """Phase 5: Survival / Time-to-Recovery."""
+    checks = []
+    report_dir = Path("reports/phase5")
+
+    if report_dir.exists():
+        # KM report
+        km_path = report_dir / "kaplan_meier_report.json"
+        checks.append(("KM report exists", km_path.exists()))
+
+        # Cox report
+        cox_path = report_dir / "cox_report.json"
+        if cox_path.exists():
+            with open(cox_path) as f:
+                cox = json.load(f)
+            checks.append((f"Cox models ({len(cox)})", len(cox) >= 2))
+            for name, res in cox.items():
+                checks.append((f"{name} C-index ({res['test_cindex']:.4f})",
+                               res["test_cindex"] > 0.5))
+        else:
+            checks.append(("Cox report exists", False))
+
+        # RSF report
+        rsf_path = report_dir / "rsf_report.json"
+        if rsf_path.exists():
+            with open(rsf_path) as f:
+                rsf = json.load(f)
+            checks.append((f"RSF models ({len(rsf)})", len(rsf) >= 2))
+        else:
+            checks.append(("RSF report exists", False))
+
+        # Intervention curves
+        curves_path = report_dir / "intervention_curves.json"
+        checks.append(("Intervention curves", curves_path.exists()))
+
+        # Summary
+        summary_path = report_dir / "phase5_summary.json"
+        checks.append(("Phase 5 summary", summary_path.exists()))
+    else:
+        checks.append(("Phase 5 report directory", False))
+
+    return checks
+
+
+def check_phase6():
+    """Phase 6: Causal / Uplift ML."""
+    checks = []
+    report_dir = Path("reports/phase6")
+
+    if report_dir.exists():
+        summary_path = report_dir / "phase6_summary.json"
+        if summary_path.exists():
+            with open(summary_path) as f:
+                summary = json.load(f)
+            checks.append(("Phase 6 summary exists", True))
+            checks.append(("Best model selected", summary.get("best_model") is not None))
+            checks.append(("Models evaluated", len(summary.get("models", {})) >= 4))
+            
+            # Check policy value > control
+            best_model = summary.get("best_model")
+            if best_model and best_model in summary.get("models", {}):
+                pv = summary["models"][best_model]["policy_value"]
+                cv = summary.get("control_value", -999)
+                checks.append((f"Best policy ({pv:.4f}) > control ({cv:.4f})", pv > cv))
+        else:
+            checks.append(("Phase 6 summary exists", False))
+        
+        eval_path = report_dir / "causal_evaluation.json"
+        checks.append(("Causal evaluation file", eval_path.exists()))
+    else:
+        checks.append(("Phase 6 report directory", False))
+
+    return checks
+
+
 def check_tests():
     """Test suite check."""
     import subprocess
@@ -340,6 +415,8 @@ def run_verification():
         ("PHASE 3", check_phase3),
         ("PHASE 3.5", check_phase35),
         ("PHASE 4", check_phase4),
+        ("PHASE 5", check_phase5),
+        ("PHASE 6", check_phase6),
     ]
 
     detail_sections = [
@@ -384,7 +461,7 @@ def run_verification():
     print("=" * 60)
 
     overall = all(results.values())
-    print(f"OVERALL STATUS:")
+    print("OVERALL STATUS:")
     print(f"{'PASS' if overall else 'FAIL'}")
     print("=" * 60)
 
