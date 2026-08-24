@@ -1,0 +1,261 @@
+# RecoveryTwin Financial Policy Simulation Configuration
+# Phase 8 — Financial Policy Simulator & Stress Testing
+#
+# All monetary values are synthetic (INR) for the competition environment.
+# These are NOT real Razorpay pricing data.
+
+# ============================================================
+# INTERVENTION COSTS
+# ============================================================
+intervention_costs:
+  control: 0.0
+  retry: 0.50
+  reminder: 1.00
+  alternative_method: 2.50
+
+# ============================================================
+# COST SENSITIVITY SCENARIOS
+# ============================================================
+cost_scenarios:
+  low:
+    retry: 0.10
+    reminder: 0.25
+    alternative_method: 0.50
+  base:
+    retry: 0.50
+    reminder: 1.00
+    alternative_method: 2.50
+  high:
+    retry: 2.00
+    reminder: 3.00
+    alternative_method: 5.00
+  extreme:
+    retry: 5.00
+    reminder: 8.00
+    alternative_method: 15.00
+
+# ============================================================
+# TIME VALUE OF RECOVERY
+# ============================================================
+time_discount:
+  lambda_values:
+    - 0.000   # No discount
+    - 0.005   # Mild
+    - 0.010   # Moderate
+    - 0.020   # Strong
+    - 0.050   # Very strong
+  half_life_hours: 24.0
+
+# ============================================================
+# TREATMENT EFFECT DEGRADATION
+# ============================================================
+degradation:
+  factors:
+    - 0.00    # No degradation
+    - 0.10    # 10% degradation
+    - 0.20    # 20% degradation
+    - 0.30    # 30% degradation
+    - 0.40    # 40% degradation
+    - 0.50    # 50% degradation
+  # Each treatment can degrade independently
+  per_treatment:
+    retry: 0.00
+    reminder: 0.00
+    alternative_method: 0.00
+
+# ============================================================
+# CUSTOMER FATIGUE
+# ============================================================
+fatigue:
+  threshold_values:
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+    - 6
+  base_threshold: 6
+  fatigue_impact:
+    control: 0.0
+    retry: 1.0
+    reminder: 1.0
+    alternative_method: 2.0
+
+# ============================================================
+# RETRY LIMITS
+# ============================================================
+retry_limits:
+  values:
+    - 0
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+  base_limit: 3
+
+# ============================================================
+# MERCHANT SEGMENTS
+# ============================================================
+merchant_segments:
+  SMALL:
+    min_amount: 0
+    max_amount: 1000
+    margin: 0.02
+  MEDIUM:
+    min_amount: 1000
+    max_amount: 5000
+    margin: 0.015
+  LARGE:
+    min_amount: 5000
+    max_amount: 50000
+    margin: 0.012
+  ENTERPRISE:
+    min_amount: 50000
+    max_amount: 500000
+    margin: 0.01
+
+# ============================================================
+# PAYMENT AMOUNT BUCKETS
+# ============================================================
+payment_buckets:
+  micro:
+    min: 0
+    max: 100
+  small:
+    min: 100
+    max: 500
+  medium:
+    min: 500
+    max: 1000
+  large:
+    min: 1000
+    max: 5000
+  very_large:
+    min: 5000
+    max: 500000
+
+# ============================================================
+# MONTE CARLO
+# ============================================================
+monte_carlo:
+  n_simulations: 500
+  random_seed: 42
+  confidence_intervals:
+    - 5
+    - 25
+    - 50
+    - 75
+    - 95
+
+# ============================================================
+# NAMED SCENARIOS
+# ============================================================
+scenarios:
+  BASELINE:
+    description: "Default parameters"
+    cost_multiplier: 1.0
+    degradation_factor: 0.0
+    recovery_rate_multiplier: 1.0
+    treatment_effect_multiplier: 1.0
+    amount_multiplier: 1.0
+    fatigue_threshold: 6
+
+  LOW_RECOVERY:
+    description: "30% reduction in recovery rates"
+    cost_multiplier: 1.0
+    degradation_factor: 0.0
+    recovery_rate_multiplier: 0.7
+    treatment_effect_multiplier: 1.0
+    amount_multiplier: 1.0
+    fatigue_threshold: 6
+
+  HIGH_RECOVERY:
+    description: "30% increase in recovery rates"
+    cost_multiplier: 1.0
+    degradation_factor: 0.0
+    recovery_rate_multiplier: 1.3
+    treatment_effect_multiplier: 1.0
+    amount_multiplier: 1.0
+    fatigue_threshold: 6
+
+  HIGH_COST:
+    description: "Intervention costs 3x higher"
+    cost_multiplier: 3.0
+    degradation_factor: 0.0
+    recovery_rate_multiplier: 1.0
+    treatment_effect_multiplier: 1.0
+    amount_multiplier: 1.0
+    fatigue_threshold: 6
+
+  LOW_COST:
+    description: "Intervention costs 0.5x"
+    cost_multiplier: 0.5
+    degradation_factor: 0.0
+    recovery_rate_multiplier: 1.0
+    treatment_effect_multiplier: 1.0
+    amount_multiplier: 1.0
+    fatigue_threshold: 6
+
+  HIGH_FATIGUE:
+    description: "Low fatigue tolerance (threshold=2)"
+    cost_multiplier: 1.0
+    degradation_factor: 0.0
+    recovery_rate_multiplier: 1.0
+    treatment_effect_multiplier: 1.0
+    amount_multiplier: 1.0
+    fatigue_threshold: 2
+
+  LOW_FATIGUE:
+    description: "High fatigue tolerance (threshold=10)"
+    cost_multiplier: 1.0
+    degradation_factor: 0.0
+    recovery_rate_multiplier: 1.0
+    treatment_effect_multiplier: 1.0
+    amount_multiplier: 1.0
+    fatigue_threshold: 10
+
+  HIGH_VALUE:
+    description: "Payment amounts 2x higher"
+    cost_multiplier: 1.0
+    degradation_factor: 0.0
+    recovery_rate_multiplier: 1.0
+    treatment_effect_multiplier: 1.0
+    amount_multiplier: 2.0
+    fatigue_threshold: 6
+
+  LOW_VALUE:
+    description: "Payment amounts 0.5x"
+    cost_multiplier: 1.0
+    degradation_factor: 0.0
+    recovery_rate_multiplier: 1.0
+    treatment_effect_multiplier: 1.0
+    amount_multiplier: 0.5
+    fatigue_threshold: 6
+
+  DEGRADATION_20:
+    description: "Treatment effects degraded by 20%"
+    cost_multiplier: 1.0
+    degradation_factor: 0.20
+    recovery_rate_multiplier: 1.0
+    treatment_effect_multiplier: 0.80
+    amount_multiplier: 1.0
+    fatigue_threshold: 6
+
+  DEGRADATION_40:
+    description: "Treatment effects degraded by 40%"
+    cost_multiplier: 1.0
+    degradation_factor: 0.40
+    recovery_rate_multiplier: 1.0
+    treatment_effect_multiplier: 0.60
+    amount_multiplier: 1.0
+    fatigue_threshold: 6
+
+  ADVERSE_COMBINED:
+    description: "Worst-case: high costs, degradation, low amounts"
+    cost_multiplier: 2.0
+    degradation_factor: 0.30
+    recovery_rate_multiplier: 0.7
+    treatment_effect_multiplier: 0.70
+    amount_multiplier: 0.8
+    fatigue_threshold: 3

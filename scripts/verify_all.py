@@ -32,6 +32,7 @@ def check_phase0():
         "src/recoverytwin/causal",
         "src/recoverytwin/survival",
         "src/recoverytwin/decision",
+        "src/recoverytwin/financial",
     ]
     for d in src_dirs:
         checks.append(("Dir: " + d, Path(d).is_dir()))
@@ -396,6 +397,53 @@ def check_phase7():
     return checks
 
 
+def check_phase8():
+    """Phase 8: Financial Policy Simulation & Stress Testing."""
+    checks = []
+    report_dir = Path("reports/phase8")
+
+    if report_dir.exists():
+        report_path = report_dir / "phase8_report.json"
+        if report_path.exists():
+            with open(report_path) as f:
+                report = json.load(f)
+            checks.append(("Phase 8 report exists", True))
+
+            # Baseline policies
+            bp = report.get("baseline_policies", {})
+            checks.append((f"Baseline policies ({len(bp)})", len(bp) >= 4))
+
+            # RT > do-nothing
+            rt_val = bp.get("recoverytwin", {}).get("net_revenue", 0)
+            dn_val = bp.get("do_nothing", {}).get("net_revenue", 0)
+            checks.append(("RT > do-nothing", rt_val > dn_val))
+
+            # Scenarios
+            sc = report.get("scenario_results", [])
+            checks.append((f"Scenarios ({len(sc)})", len(sc) >= 5))
+
+            # Monte Carlo
+            mc = report.get("monte_carlo", {})
+            checks.append(("Monte Carlo", len(mc) >= 3))
+
+            # Robustness
+            rob = report.get("robustness", {})
+            checks.append(("Robustness score", rob.get("n_scenarios", 0) >= 5))
+
+            # Leakage audit
+            la = report.get("leakage_audit", {})
+            checks.append(("No leakage", la.get("pass", False)))
+        else:
+            checks.append(("Phase 8 report exists", False))
+
+        # Config exists
+        checks.append(("Financial config", Path("configs/financial.yaml").exists()))
+    else:
+        checks.append(("Phase 8 report directory", False))
+
+    return checks
+
+
 def check_phase6():
     """Phase 6: Causal / Uplift ML."""
     checks = []
@@ -458,6 +506,7 @@ def run_verification():
         ("PHASE 5", check_phase5),
         ("PHASE 6", check_phase6),
         ("PHASE 7", check_phase7),
+        ("PHASE 8", check_phase8),
     ]
 
     detail_sections = [
