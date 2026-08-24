@@ -9,7 +9,7 @@ intervention_costs:
 limits:
   max_retry_attempts: 3
   max_total_interventions: 5
-  customer_fatigue_threshold: 3
+  customer_fatigue_threshold: 6
   cooldown_hours: 24
 
 escalation_rules:

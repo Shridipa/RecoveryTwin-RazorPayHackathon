@@ -169,11 +169,10 @@ class PolicyFilter:
         """
         Check if action is eligible given current payment state.
 
-        Returns (eligible, reason_string).
+        NOTE: In production, 'recovered' would NOT be known at decision time.
+        The eligibility check uses only pre-treatment features.
+        We do NOT check 'recovered' here because that would be outcome leakage.
         """
-        # Stopping rule: if already recovered, no intervention needed
-        if recovered:
-            return False, "Payment already recovered"
 
         # Control is always eligible
         if action == 0:
@@ -236,16 +235,23 @@ class DecisionEngine:
         Generate counterfactual recovery probabilities for all actions.
 
         predict_fn(df, action) -> np.ndarray of P(Y=1|X, action)
+        
+        Also computes expected net value per action:
+          EV(a) = P(Y|X,a) * amount - cost(a)
         """
         result = df[["payment_id", "amount"]].copy()
+        amounts = df["amount"].values
 
         control_probs = predict_fn(df, 0)
         result["control_prob"] = control_probs
+        result["control_expected_value"] = control_probs * amounts
 
         for action in [1, 2, 3]:
             probs = predict_fn(df, action)
             action_name = ACTION_NAMES[action]
+            cost = self.action_costs.get(action, 0.0)
             result[f"{action_name}_prob"] = probs
+            result[f"{action_name}_expected_value"] = probs * amounts - cost
 
         return result
 
@@ -273,43 +279,48 @@ class DecisionEngine:
         """
         Calculate financial value for each action.
 
-        For each action:
+        Uses EXPECTED VALUE formulation (robust to noisy CATE):
+          expected_value(a) = P(Y|X,a) * amount - cost(a)
+
+        For reporting, also computes:
           incremental_revenue = amount * CATE
-          net_value = incremental_revenue - cost
-          time_adjusted_value = net_value * time_discount
+          net_incremental = incremental_revenue - cost
         """
         result = counterfactual_table.copy()
         amounts = df["amount"].values
+
+        # Control expected value: P(Y|X,0) * amount - 0
+        p0 = result["control_prob"].values
+        result["control_expected_value"] = p0 * amounts
+        result["control_cost"] = 0.0
 
         for action in [1, 2, 3]:
             action_name = ACTION_NAMES[action]
             cate = result[f"{action_name}_cate"].values
             prob = result[f"{action_name}_prob"].values
 
-            # Incremental revenue
-            incremental_rev = amounts * cate
-            result[f"{action_name}_incremental_revenue"] = incremental_rev
-
-            # Intervention cost
+            # Expected value: P(Y|X,a) * amount - cost(a)
             cost = self.action_costs.get(action, 0.0)
-            result[f"{action_name}_cost"] = cost
+            expected_value = prob * amounts - cost
 
-            # Net incremental value (before time discount)
-            net_value = incremental_rev - cost
-            result[f"{action_name}_net_value"] = net_value
+            # CATE-based reporting (for transparency)
+            incremental_rev = amounts * cate
+            net_incremental = incremental_rev - cost
 
-            # Time discount
+            # Time discount on expected value
             if self.time_discount_cfg.get("enabled", True) and survival_probs and action in survival_probs:
-                # Use median recovery time from survival model
                 median_time = survival_probs[action].get("median_hours", 24.0)
                 half_life = self.time_discount_cfg.get("half_life_hours", 24.0)
                 td = time_discount_exponential(median_time, half_life)
             else:
-                # Default: no time discount if survival info unavailable
                 td = 1.0
 
+            result[f"{action_name}_incremental_revenue"] = incremental_rev
+            result[f"{action_name}_cost"] = cost
+            result[f"{action_name}_net_incremental"] = net_incremental
+            result[f"{action_name}_expected_value"] = expected_value
             result[f"{action_name}_time_discount"] = td
-            result[f"{action_name}_time_adjusted_value"] = net_value * td
+            result[f"{action_name}_time_adjusted_value"] = expected_value * td
 
         return result
 
@@ -321,8 +332,13 @@ class DecisionEngine:
         """
         Select optimal action for each payment.
 
-        Applies policy constraints, then selects argmax(time_adjusted_value).
-        Falls back to control if no intervention has positive value.
+        Uses expected value formulation for ALL actions (including control):
+          V(a) = P(Y|X,a) * amount - cost(a)
+          V(0) = P(Y|X,0) * amount
+
+        Selects argmax V(a) over eligible actions.
+        This is more robust than CATE-based selection because it uses
+        absolute probability levels instead of noisy differences.
         """
         result = financial_table.copy()
 
@@ -333,31 +349,25 @@ class DecisionEngine:
         rejection_reasons = [[] for _ in range(n)]
 
         for i in range(n):
-            amount = df["amount"].iloc[i]
             attempt_count = df["attempt_count"].iloc[i]
             previous_failures = df["previous_failures"].iloc[i]
             fatigue = df["customer_fatigue"].iloc[i]
             hours_since = df["hours_since_failure"].iloc[i]
-            recovered = bool(df["recovered"].iloc[i])
 
+            # Control expected value (always eligible)
             best_action = 0
-            best_value = 0.0  # Control always has value 0
+            best_value = result["control_expected_value"].iloc[i]
 
-            for action in range(4):
+            for action in range(1, 4):
                 action_name = ACTION_NAMES[action]
 
-                if action == 0:
-                    # Control is always eligible with value 0
-                    continue
-
-                # Check eligibility
+                # Check eligibility (using only pre-treatment features)
                 eligible, reason = self.policy_filter.check_eligibility(
                     action=action,
                     attempt_count=attempt_count,
                     previous_failures=previous_failures,
                     customer_fatigue=fatigue,
                     hours_since_failure=hours_since,
-                    recovered=recovered,
                 )
 
                 if not eligible:
@@ -365,18 +375,9 @@ class DecisionEngine:
                     rejection_reasons[i].append(f"{ACTION_LABELS[action]}: {reason}")
                     continue
 
-                # Get time-adjusted value
-                tav_col = f"{action_name}_time_adjusted_value"
-                if tav_col in result.columns:
-                    value = result[tav_col].iloc[i]
-                else:
-                    value = 0.0
-
-                # Check minimum incremental value threshold
-                if value < self.min_incremental_value:
-                    eligible_mask[i, action] = False
-                    rejection_reasons[i].append(f"{ACTION_LABELS[action]}: Net value ({value:.2f}) below threshold")
-                    continue
+                # Get expected value directly from counterfactual table
+                ev_col = f"{action_name}_expected_value"
+                value = result[ev_col].iloc[i]
 
                 if value > best_value:
                     best_value = value

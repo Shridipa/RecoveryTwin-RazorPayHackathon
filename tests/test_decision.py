@@ -145,13 +145,13 @@ class TestFinancialValue:
             )
 
     def test_net_value_subtracts_cost(self, engine, test_data, mock_predict_fn):
-        """Net value = incremental revenue - cost."""
+        """Net incremental = incremental revenue - cost."""
         cf_table = engine.generate_counterfactual_table(test_data, mock_predict_fn)
         cate_table = engine.calculate_cate(cf_table)
         fin_table = engine.calculate_financial_value(test_data, cate_table)
 
         for action_name in ["retry", "reminder", "alternative_method"]:
-            net = fin_table[f"{action_name}_net_value"]
+            net = fin_table[f"{action_name}_net_incremental"]
             inc = fin_table[f"{action_name}_incremental_revenue"]
             cost = fin_table[f"{action_name}_cost"].iloc[0]
             expected = inc - cost
@@ -164,7 +164,7 @@ class TestFinancialValue:
         cf_table = engine.generate_counterfactual_table(test_data, mock_predict_fn)
         cate_table = engine.calculate_cate(cf_table)
         fin_table = engine.calculate_financial_value(test_data, cate_table)
-        # Control has no explicit cost column but it's implicitly 0
+        assert fin_table["control_cost"].iloc[0] == 0.0
         assert fin_table["retry_cost"].iloc[0] == DEFAULT_COSTS[1]
 
 
@@ -228,16 +228,16 @@ class TestPolicyFilter:
         assert not eligible
         assert "fatigue" in reason.lower()
 
-    def test_recovered_stops_intervention(self):
-        """Already-recovered payments should not get interventions."""
+    def test_recovered_not_used_for_eligibility(self):
+        """Recovered status should NOT block interventions (no outcome leakage)."""
         pf = PolicyFilter(load_policy_config())
         eligible, reason = pf.check_eligibility(
             action=1, attempt_count=1, previous_failures=0,
             customer_fatigue=0.0, hours_since_failure=24.0,
             recovered=True,
         )
-        assert not eligible
-        assert "recovered" in reason.lower()
+        # Should be eligible - we don't use outcome info for decisions
+        assert eligible
 
 
 class TestActionSelection:

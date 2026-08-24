@@ -34,8 +34,14 @@ class SLearner:
         self.feature_names = None
         self.n_treatments = 4
     
-    def _prepare_features(self, df: pd.DataFrame, include_treatment: bool = True) -> pd.DataFrame:
-        """Prepare features from dataframe."""
+    def _prepare_features(self, df: pd.DataFrame, include_treatment: bool = True,
+                          fit_encoders: bool = False) -> pd.DataFrame:
+        """Prepare features from dataframe.
+        
+        When fit_encoders=True (during training), fit and store LabelEncoders.
+        When fit_encoders=False (during prediction), reuse stored encoders
+        to ensure consistent encoding across different input sizes.
+        """
         from recoverytwin.data.validator import BLOCKED_FEATURES
         
         feature_cols = [c for c in df.columns 
@@ -47,9 +53,20 @@ class SLearner:
         X = df[feature_cols].copy()
         
         # Encode categoricals
-        for col in X.select_dtypes(include=['object', 'category']).columns:
-            le = LabelEncoder()
-            X[col] = le.fit_transform(X[col].astype(str))
+        categorical_cols = X.select_dtypes(include=['object', 'category']).columns
+        for col in categorical_cols:
+            if fit_encoders or not hasattr(self, 'label_encoders') or col not in self.label_encoders:
+                le = LabelEncoder()
+                le.fit(X[col].astype(str))
+                if not hasattr(self, 'label_encoders'):
+                    self.label_encoders = {}
+                self.label_encoders[col] = le
+            else:
+                le = self.label_encoders[col]
+            # Handle unseen categories by mapping to 0
+            known = set(le.classes_)
+            X[col] = X[col].astype(str).apply(lambda x: x if x in known else le.classes_[0])
+            X[col] = le.transform(X[col])
         
         X = X.apply(pd.to_numeric, errors='coerce').fillna(0)
         
@@ -60,7 +77,8 @@ class SLearner:
     
     def fit(self, df: pd.DataFrame, y_col: str = 'recovered') -> 'SLearner':
         """Fit the S-Learner."""
-        X = self._prepare_features(df, include_treatment=True)
+        self.label_encoders = {}
+        X = self._prepare_features(df, include_treatment=True, fit_encoders=True)
         y = df[y_col].values
         
         self.feature_names = list(X.columns)
