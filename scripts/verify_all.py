@@ -356,6 +356,46 @@ def check_phase5():
     return checks
 
 
+def check_phase7():
+    """Phase 7: Counterfactual Decision Engine."""
+    checks = []
+    report_dir = Path("reports/phase7")
+
+    if report_dir.exists():
+        summary_path = report_dir / "phase7_summary.json"
+        if summary_path.exists():
+            with open(summary_path) as f:
+                summary = json.load(f)
+            checks.append(("Phase 7 summary exists", True))
+            
+            # Check policies evaluated
+            policies = summary.get("policies", {})
+            checks.append((f"Policies evaluated ({len(policies)})", len(policies) >= 4))
+            
+            # Check RecoveryTwin > do-nothing
+            rt_val = policies.get("recoverytwin", {}).get("value", 0)
+            dn_val = policies.get("do_nothing", {}).get("value", 0)
+            checks.append(("RT > do-nothing", rt_val > dn_val))
+            
+            # Check leakage audit
+            audit = summary.get("leakage_audit", {})
+            checks.append(("No leakage", all(v for k, v in audit.items() if isinstance(v, bool))))
+            
+            # Check regret calculated
+            regret = summary.get("policy_regret_pct")
+            checks.append(("Policy regret", regret is not None and 0 <= regret <= 100))
+        else:
+            checks.append(("Phase 7 summary exists", False))
+        
+        # Check prediction file
+        pred_path = report_dir / "counterfactual_predictions.parquet"
+        checks.append(("Counterfactual predictions", pred_path.exists()))
+    else:
+        checks.append(("Phase 7 report directory", False))
+
+    return checks
+
+
 def check_phase6():
     """Phase 6: Causal / Uplift ML."""
     checks = []
@@ -417,6 +457,7 @@ def run_verification():
         ("PHASE 4", check_phase4),
         ("PHASE 5", check_phase5),
         ("PHASE 6", check_phase6),
+        ("PHASE 7", check_phase7),
     ]
 
     detail_sections = [
