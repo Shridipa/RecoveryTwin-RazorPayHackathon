@@ -1,81 +1,67 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../services/api';
+import { inr, pct, actionLabel, failureLabel } from '../utils/format';
+import { Loading, ErrorState } from '../components/States';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
-const fmt = (n: number) => `Rs.${(n / 100000).toFixed(1)}L`;
-const fmtFull = (n: number) => `Rs.${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
-const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
-
-const COLORS = ['#94a3b8', '#3b82f6', '#f59e0b', '#8b5cf6', '#10b981'];
-const ACTION_NAMES: Record<string, string> = {
-  control: 'Do Nothing', retry: 'Retry', reminder: 'Reminder', alternative_method: 'Alt Method'
+const ACTION_COLORS: Record<string, string> = {
+  'Do Nothing': '#94a3b8', Retry: '#2563eb', Reminder: '#f59e0b', 'Alt Method': '#8b5cf6', Alternative: '#8b5cf6',
 };
 
 export default function OverviewPage() {
-  const { data: overview, isLoading } = useQuery({ queryKey: ['overview'], queryFn: api.getOverview });
+  const { data: overview, isLoading, error, refetch } = useQuery({ queryKey: ['overview'], queryFn: api.getOverview });
   const { data: policies } = useQuery({ queryKey: ['policies'], queryFn: api.getPolicies });
   const { data: actions } = useQuery({ queryKey: ['actions'], queryFn: api.getActions });
+  const { data: payments } = useQuery({ queryKey: ['payments', 1, 8], queryFn: () => api.getPayments({ page: 1, page_size: 8 }) });
 
-  if (isLoading || !overview) {
-    return <div className="empty-state"><div className="skeleton" style={{ width: '100%', height: 400 }} /></div>;
-  }
+  if (isLoading) return <Loading text="Loading recovery intelligence..." />;
+  if (error || !overview) return <ErrorState message="Unable to connect to RecoveryTwin engine." onRetry={() => refetch()} />;
 
-  const policyData = (policies || []).map(p => ({
-    name: p.name,
-    value: p.net_revenue,
-    isRT: p.name === 'Recoverytwin',
-  }));
-
+  const policyData = (policies || []).map(p => ({ name: p.name, value: p.net_revenue, isRT: p.name === 'Recoverytwin' }));
   const actionData = actions ? Object.entries(actions)
-    .filter(([k]) => k !== 'overall_recovery_rate')
-    .map(([k, v]) => ({ name: ACTION_NAMES[k] || k, value: v * 100 }))
-    .filter(a => a.value > 0) : [];
+    .filter(([k]) => !['overall_recovery_rate', 'intervention_rate'].includes(k))
+    .map(([k, v]) => ({ name: actionLabel(k), value: (v as number) * 100 }))
+    .filter(a => a.value > 0.5) : [];
 
   return (
     <>
       <div className="page-header">
-        <h2>Revenue Recovery Command Center</h2>
-        <p>Counterfactual decision intelligence for failed payment recovery</p>
+        <h2>Recovery Command Center</h2>
+        <p>Monitor failed payments and recovery opportunities</p>
       </div>
 
-      <div className="metrics-grid">
+      <div className="metrics-row">
         <div className="metric-card">
-          <div className="label">Revenue at Risk</div>
-          <div className="value">{fmt(overview.at_risk_revenue)}</div>
-          <div className="sub">{overview.total_payments.toLocaleString()} failed payments</div>
+          <div className="label">Payments at Risk</div>
+          <div className="value">{overview.total_payments.toLocaleString()}</div>
         </div>
-        <div className="metric-card primary">
+        <div className="metric-card">
+          <div className="label">Value at Risk</div>
+          <div className="value">{inr(overview.at_risk_revenue)}</div>
+        </div>
+        <div className="metric-card accent">
           <div className="label">Expected Recovery</div>
-          <div className="value">{fmt(overview.expected_recovery)}</div>
+          <div className="value">{inr(overview.expected_recovery)}</div>
           <div className="sub">RecoveryTwin policy</div>
         </div>
         <div className="metric-card success">
-          <div className="label">Incremental Recovery</div>
-          <div className="value">+{fmt(overview.incremental_recovery)}</div>
+          <div className="label">Recovery Opportunity</div>
+          <div className="value">+{inr(overview.incremental_recovery)}</div>
           <div className="sub">vs. doing nothing</div>
-        </div>
-        <div className="metric-card">
-          <div className="label">Policy Regret</div>
-          <div className="value" style={{ color: overview.policy_regret < 0.5 ? 'var(--warning)' : 'var(--danger)' }}>
-            {pct(overview.policy_regret)}
-          </div>
-          <div className="sub">vs. oracle (perfect info)</div>
         </div>
       </div>
 
-      <div className="grid-2 mb-24">
+      <div className="grid-2 mb-20">
         <div className="card">
           <div className="card-header"><h3>Policy Comparison</h3></div>
           <div className="card-body">
-            <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={policyData} layout="vertical" margin={{ left: 20, right: 20 }}>
-                <XAxis type="number" tickFormatter={(v: number) => fmt(v)} tick={{ fontSize: 11 }} />
-                <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 12 }} />
-                <Tooltip formatter={(v: number) => fmtFull(v)} />
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={policyData} layout="vertical" margin={{ left: 10, right: 20 }}>
+                <XAxis type="number" tickFormatter={(v: number) => inr(v)} tick={{ fontSize: 10 }} />
+                <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 11 }} />
+                <Tooltip formatter={(v: number) => inr(v)} />
                 <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-                  {policyData.map((entry, i) => (
-                    <Cell key={i} fill={entry.isRT ? '#2563eb' : COLORS[i % COLORS.length]} />
-                  ))}
+                  {policyData.map((e, i) => <Cell key={i} fill={e.isRT ? '#2563eb' : ['#94a3b8','#60a5fa','#fbbf24','#a78bfa','#34d399'][i] || '#94a3b8'} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -83,41 +69,68 @@ export default function OverviewPage() {
         </div>
 
         <div className="card">
-          <div className="card-header"><h3>Action Distribution</h3></div>
+          <div className="card-header"><h3>Recommended Actions</h3></div>
           <div className="card-body">
-            <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={actionData} margin={{ left: 20, right: 20 }}>
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                <YAxis tickFormatter={(v: number) => `${v}%`} tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(v: number) => `${v.toFixed(1)}%`} />
-                <Bar dataKey="value" fill="#2563eb" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            {actionData.map(a => (
+              <div key={a.name} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+                <span style={{ width: 110, fontSize: 12, fontWeight: 600 }}>{a.name}</span>
+                <div style={{ flex: 1, height: 8, background: 'var(--border-light)', borderRadius: 4, overflow: 'hidden' }}>
+                  <div style={{ width: `${a.value}%`, height: '100%', background: ACTION_COLORS[a.name] || '#94a3b8', borderRadius: 4, transition: 'width 0.4s' }} />
+                </div>
+                <span style={{ width: 44, textAlign: 'right', fontSize: 13, fontWeight: 700 }}>{a.value.toFixed(0)}%</span>
+              </div>
+            ))}
+            <div style={{ display: 'flex', gap: 24, marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border-light)' }}>
+              <div>
+                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', fontWeight: 600 }}>Recovery Rate</div>
+                <div style={{ fontSize: 20, fontWeight: 700, marginTop: 2 }}>{pct(overview.recovery_rate)}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', fontWeight: 600 }}>Intervention Rate</div>
+                <div style={{ fontSize: 20, fontWeight: 700, marginTop: 2 }}>{pct(overview.intervention_rate)}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', fontWeight: 600 }}>Policy Robustness</div>
+                <div style={{ fontSize: 20, fontWeight: 700, marginTop: 2, color: 'var(--success)' }}>{pct(overview.robustness_vs_baseline)}</div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
+      {/* Top Payments */}
       <div className="card">
         <div className="card-header">
-          <h3>Decision Coverage</h3>
+          <h3>Payments Requiring Attention</h3>
+          <a href="/app/payments" style={{ fontSize: 12, color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>View all</a>
         </div>
-        <div className="card-body" style={{ display: 'flex', gap: 32 }}>
-          <div>
-            <div style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Recovery Rate</div>
-            <div style={{ fontSize: 24, fontWeight: 700, marginTop: 4 }}>{pct(overview.recovery_rate)}</div>
-          </div>
-          <div>
-            <div style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Intervention Rate</div>
-            <div style={{ fontSize: 24, fontWeight: 700, marginTop: 4 }}>{pct(overview.intervention_rate)}</div>
-          </div>
-          <div>
-            <div style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Robustness (vs Do Nothing)</div>
-            <div style={{ fontSize: 24, fontWeight: 700, marginTop: 4, color: 'var(--success)' }}>{pct(overview.robustness_vs_baseline)}</div>
-          </div>
-          <div>
-            <div style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Total Payments</div>
-            <div style={{ fontSize: 24, fontWeight: 700, marginTop: 4 }}>{overview.total_payments.toLocaleString()}</div>
-          </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Payment</th>
+                <th>Amount</th>
+                <th>Issue</th>
+                <th>P(Retry)</th>
+                <th>P(Reminder)</th>
+                <th>Recommendation</th>
+                <th>Expected Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(payments?.items || []).map(p => (
+                <tr key={p.payment_id} className="clickable" onClick={() => window.location.href = `/app/payments/${p.payment_id}`}>
+                  <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{p.payment_id}</td>
+                  <td style={{ fontWeight: 600 }}>{inr(p.amount)}</td>
+                  <td style={{ color: 'var(--text-secondary)' }}>{failureLabel(p.failure_reason)}</td>
+                  <td>{p.retry_prob != null ? pct(p.retry_prob) : '—'}</td>
+                  <td>{p.reminder_prob != null ? pct(p.reminder_prob) : '—'}</td>
+                  <td><span className={`badge badge-${p.recommended_action?.toLowerCase() === 'retry' ? 'retry' : p.recommended_action?.toLowerCase()?.includes('reminder') ? 'reminder' : p.recommended_action?.toLowerCase()?.includes('alternative') ? 'alternative' : 'control'}`}>{p.recommended_action}</span></td>
+                  <td style={{ fontWeight: 600 }}>{p.recommended_value != null ? inr(p.recommended_value) : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </>

@@ -1,105 +1,107 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../services/api';
+import { inr, inrFull } from '../utils/format';
+import { Loading, ErrorState } from '../components/States';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
-const fmt = (n: number) => `Rs.${(n / 100000).toFixed(1)}L`;
-const fmtFull = (n: number) => `Rs.${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+const SCENARIO_LABELS: Record<string, string> = {
+  BASELINE: 'Baseline', LOW_RECOVERY: 'Low Recovery', HIGH_RECOVERY: 'High Recovery',
+  HIGH_COST: 'High Cost', LOW_COST: 'Low Cost', HIGH_FATIGUE: 'High Fatigue',
+  LOW_FATIGUE: 'Low Fatigue', HIGH_VALUE: 'High Value', LOW_VALUE: 'Low Value',
+  DEGRADATION_20: 'Degradation 20%', DEGRADATION_40: 'Degradation 40%',
+  ADVERSE_COMBINED: 'Worst Case',
+};
 
 export default function ScenariosPage() {
-  const { data: scenarios, isLoading } = useQuery({ queryKey: ['scenarios'], queryFn: api.getScenarios });
+  const [selected, setSelected] = useState('BASELINE');
+  const { data: scenarios, isLoading, error, refetch } = useQuery({ queryKey: ['scenarios'], queryFn: api.getScenarios });
 
-  if (isLoading || !scenarios) {
-    return <div className="empty-state"><div className="skeleton" style={{ width: '100%', height: 400 }} /></div>;
-  }
+  if (isLoading) return <Loading text="Loading scenarios..." />;
+  if (error || !scenarios) return <ErrorState message="Unable to load scenarios." onRetry={() => refetch()} />;
 
+  const active = scenarios.find(s => s.name === selected) || scenarios[0];
   const baseline = scenarios.find(s => s.name === 'BASELINE');
   const chartData = scenarios.map(s => ({
-    name: s.name.replace(/_/g, ' '),
-    value: s.recoverytwin_revenue,
-    isBaseline: s.name === 'BASELINE',
+    name: SCENARIO_LABELS[s.name] || s.name, value: s.recoverytwin_revenue, name_raw: s.name,
   }));
+  const passing = scenarios.filter(s => s.beats_do_nothing).length;
 
   return (
     <>
       <div className="page-header">
         <h2>Scenario Lab</h2>
-        <p>Stress-test the recovery policy under different economic conditions</p>
+        <p>Stress-test the recovery policy under different conditions</p>
       </div>
 
-      <div className="metrics-grid mb-24">
-        <div className="metric-card primary">
+      <div className="metrics-row mb-20">
+        <div className="metric-card accent">
           <div className="label">Baseline Recovery</div>
-          <div className="value">{fmt(baseline?.recoverytwin_revenue || 0)}</div>
-          <div className="sub">Default parameters</div>
+          <div className="value">{inr(baseline?.recoverytwin_revenue || 0)}</div>
         </div>
         <div className="metric-card success">
           <div className="label">Scenarios Passing</div>
-          <div className="value">{scenarios.filter(s => s.beats_do_nothing).length}/{scenarios.length}</div>
-          <div className="sub">Beats doing nothing</div>
+          <div className="value">{passing}/{scenarios.length}</div>
+          <div className="sub">Beat doing nothing</div>
         </div>
         <div className="metric-card">
-          <div className="label">Avg Policy Regret</div>
-          <div className="value">{(scenarios.reduce((s, sc) => s + sc.regret, 0) / scenarios.length * 100).toFixed(0)}%</div>
-          <div className="sub">Across all scenarios</div>
+          <div className="label">Selected Scenario</div>
+          <div className="value" style={{ fontSize: 18 }}>{SCENARIO_LABELS[active.name] || active.name}</div>
+          <div className="sub">{active.description}</div>
         </div>
-        <div className="metric-card warning">
-          <div className="label">Worst Case</div>
-          <div className="value">{fmt(Math.min(...scenarios.map(s => s.recoverytwin_revenue)))}</div>
-          <div className="sub">Minimum recovery</div>
+        <div className="metric-card">
+          <div className="label">Scenario Recovery</div>
+          <div className="value">{inr(active.recoverytwin_revenue)}</div>
+          <div className="sub">{active.beats_do_nothing ? 'Better than doing nothing' : 'Below doing nothing'}</div>
         </div>
       </div>
 
-      <div className="card mb-24">
-        <div className="card-header"><h3>Scenario Comparison — RecoveryTwin Net Revenue</h3></div>
-        <div className="card-body">
-          <ResponsiveContainer width="100%" height={Math.max(300, scenarios.length * 32)}>
-            <BarChart data={chartData} layout="vertical" margin={{ left: 20, right: 40 }}>
-              <XAxis type="number" tickFormatter={(v: number) => fmt(v)} tick={{ fontSize: 11 }} />
-              <YAxis type="category" dataKey="name" width={160} tick={{ fontSize: 11 }} />
-              <Tooltip formatter={(v: number) => fmtFull(v)} />
-              <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-                {chartData.map((entry, i) => (
-                  <Cell key={i} fill={entry.isBaseline ? '#2563eb' : entry.value >= (baseline?.recoverytwin_revenue || 0) ? '#10b981' : '#f59e0b'} />
+      <div className="grid-2 mb-20">
+        <div className="card">
+          <div className="card-header"><h3>Scenario Comparison</h3></div>
+          <div className="card-body">
+            <ResponsiveContainer width="100%" height={Math.max(260, scenarios.length * 28)}>
+              <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 30 }}>
+                <XAxis type="number" tickFormatter={(v: number) => inr(v)} tick={{ fontSize: 10 }} />
+                <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 11 }} />
+                <Tooltip formatter={(v: number) => inrFull(v)} />
+                <Bar dataKey="value" radius={[0, 4, 4, 0]} onClick={(d: any) => d?.name_raw && setSelected(d.name_raw)}>
+                  {chartData.map((e, i) => (
+                    <Cell key={i} fill={e.name_raw === selected ? '#2563eb' : e.name_raw === 'BASELINE' ? '#60a5fa' : '#cbd5e1'} style={{ cursor: 'pointer' }} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-header"><h3>Scenario Details</h3></div>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Scenario</th><th>RT Revenue</th><th>Incremental</th><th>Regret</th><th>Profitable?</th></tr>
+              </thead>
+              <tbody>
+                {scenarios.map(s => (
+                  <tr key={s.name} className="clickable" onClick={() => setSelected(s.name)}
+                    style={s.name === selected ? { background: 'var(--accent-bg)' } : {}}>
+                    <td style={{ fontWeight: s.name === selected ? 700 : 500 }}>{SCENARIO_LABELS[s.name] || s.name}</td>
+                    <td style={{ fontWeight: 600 }}>{inr(s.recoverytwin_revenue)}</td>
+                    <td style={{ color: s.incremental > 0 ? 'var(--success)' : 'var(--danger)', fontWeight: 600 }}>
+                      {s.incremental > 0 ? '+' : ''}{inr(s.incremental)}
+                    </td>
+                    <td>{(s.regret * 100).toFixed(0)}%</td>
+                    <td>
+                      <span className={`badge ${s.beats_do_nothing ? 'badge-success' : 'badge-danger'}`}>
+                        {s.beats_do_nothing ? 'Yes' : 'No'}
+                      </span>
+                    </td>
+                  </tr>
                 ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      <div className="card">
-        <div className="card-header"><h3>Scenario Details</h3></div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Scenario</th>
-                <th>Description</th>
-                <th>RT Revenue</th>
-                <th>Incremental</th>
-                <th>Regret</th>
-                <th>Beats DN?</th>
-              </tr>
-            </thead>
-            <tbody>
-              {scenarios.map(s => (
-                <tr key={s.name} style={s.name === 'BASELINE' ? { background: '#f8faff' } : {}}>
-                  <td style={{ fontWeight: 600 }}>{s.name.replace(/_/g, ' ')}</td>
-                  <td style={{ color: 'var(--text-secondary)' }}>{s.description}</td>
-                  <td style={{ fontWeight: 600 }}>{fmtFull(s.recoverytwin_revenue)}</td>
-                  <td style={{ color: s.incremental > 0 ? 'var(--success)' : 'var(--danger)' }}>
-                    {s.incremental > 0 ? '+' : ''}{fmtFull(s.incremental)}
-                  </td>
-                  <td>{(s.regret * 100).toFixed(0)}%</td>
-                  <td>
-                    <span className={`badge ${s.beats_do_nothing ? 'badge-success' : 'badge-danger'}`}>
-                      {s.beats_do_nothing ? 'Yes' : 'No'}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </>

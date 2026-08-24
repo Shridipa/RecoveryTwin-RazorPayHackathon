@@ -1,112 +1,84 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
+import { Search } from 'lucide-react';
 import { api } from '../services/api';
+import { inr, pct, actionLabel, failureLabel } from '../utils/format';
+import { Loading, ErrorState, Empty } from '../components/States';
+
+const REASONS = ['technical_decline', 'network_timeout', 'insufficient_funds', 'expired_card', 'bank_unavailable', 'customer_abandoned', 'incorrect_pin', 'limit_exceeded', 'fraud_suspected', 'account_frozen'];
 
 const ACTION_BADGE: Record<string, string> = {
-  'Do Nothing': 'badge-control', retry: 'badge-retry', Retry: 'badge-retry',
-  reminder: 'badge-reminder', Reminder: 'badge-reminder',
-  alternative_method: 'badge-alternative', 'Alternative Method': 'badge-alternative',
-  unknown: 'badge-control',
+  retry: 'badge-retry', reminder: 'badge-reminder', alternative_method: 'badge-alternative', 'Do Nothing': 'badge-control',
 };
 
 export default function PaymentsPage() {
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
-  const [failureFilter, setFailureFilter] = useState('');
+  const [reason, setReason] = useState('');
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['payments', page, search, failureFilter],
-    queryFn: () => api.getPayments({ page, page_size: 25, ...(search ? { search } : {}), ...(failureFilter ? { failure_reason: failureFilter } : {}) }),
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ['payments', page, search, reason],
+    queryFn: () => api.getPayments({ page, page_size: 25, ...(search ? { search } : {}), ...(reason ? { failure_reason: reason } : {}) }),
   });
+
+  if (error) return <ErrorState message="Unable to load payments." onRetry={() => refetch()} />;
 
   return (
     <>
       <div className="page-header">
-        <h2>Payment Queue</h2>
-        <p>{data?.total?.toLocaleString() || '...'} failed payments requiring recovery decisions</p>
+        <h2>Payments</h2>
+        <p>{data?.total?.toLocaleString() || '...'} failed payments</p>
       </div>
 
       <div className="card">
-        <div className="card-header" style={{ gap: 12 }}>
-          <input
-            type="text"
-            placeholder="Search payment ID..."
-            value={search}
-            onChange={e => { setSearch(e.target.value); setPage(1); }}
-            style={{ padding: '6px 12px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: 13, width: 200 }}
-          />
-          <select
-            value={failureFilter}
-            onChange={e => { setFailureFilter(e.target.value); setPage(1); }}
-            style={{ padding: '6px 12px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: 13 }}
-          >
+        <div className="card-header" style={{ gap: 10 }}>
+          <div style={{ position: 'relative', flex: '0 0 220px' }}>
+            <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+            <input
+              type="text" placeholder="Search payment ID..." value={search}
+              onChange={e => { setSearch(e.target.value); setPage(1); }}
+              style={{ padding: '7px 10px 7px 30px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: 13, width: '100%' }}
+            />
+          </div>
+          <select value={reason} onChange={e => { setReason(e.target.value); setPage(1); }}
+            style={{ padding: '7px 12px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: 13 }}>
             <option value="">All failure reasons</option>
-            <option value="technical_decline">Technical Decline</option>
-            <option value="network_timeout">Network Timeout</option>
-            <option value="insufficient_funds">Insufficient Funds</option>
-            <option value="expired_card">Expired Card</option>
-            <option value="bank_unavailable">Bank Unavailable</option>
-            <option value="customer_abandoned">Customer Abandoned</option>
-            <option value="incorrect_pin">Incorrect PIN</option>
-            <option value="limit_exceeded">Limit Exceeded</option>
-            <option value="fraud_suspected">Fraud Suspected</option>
-            <option value="account_frozen">Account Frozen</option>
+            {REASONS.map(r => <option key={r} value={r}>{failureLabel(r)}</option>)}
           </select>
         </div>
 
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Payment ID</th>
-                <th>Amount</th>
-                <th>Failure Reason</th>
-                <th>P(Retry)</th>
-                <th>P(Reminder)</th>
-                <th>Recommended</th>
-                <th>Expected Value</th>
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading ? (
-                Array.from({ length: 10 }).map((_, i) => (
-                  <tr key={i}><td colSpan={7}><div className="skeleton" style={{ height: 20 }} /></td></tr>
-                ))
-              ) : data?.items.map(item => (
-                <tr
-                  key={item.payment_id}
-                  onClick={() => navigate(`/payments/${item.payment_id}`)}
-                  style={{ cursor: 'pointer' }}
-                >
-                  <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{item.payment_id}</td>
-                  <td style={{ fontWeight: 600 }}>Rs.{item.amount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
-                  <td style={{ textTransform: 'capitalize' }}>{item.failure_reason.replace(/_/g, ' ')}</td>
-                  <td>{item.retry_prob != null ? `${(item.retry_prob * 100).toFixed(1)}%` : '—'}</td>
-                  <td>{item.reminder_prob != null ? `${(item.reminder_prob * 100).toFixed(1)}%` : '—'}</td>
-                  <td>
-                    <span className={`badge ${ACTION_BADGE[item.recommended_action] || 'badge-control'}`}>
-                      {item.recommended_action}
-                    </span>
-                  </td>
-                  <td style={{ fontWeight: 600 }}>
-                    {item.recommended_value != null ? `Rs.${item.recommended_value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : '—'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {data && (
-          <div className="pagination">
-            <span>Page {data.page} of {data.total_pages} ({data.total.toLocaleString()} payments)</span>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button disabled={page <= 1} onClick={() => setPage(p => p - 1)}>Previous</button>
-              <button disabled={page >= data.total_pages} onClick={() => setPage(p => p + 1)}>Next</button>
+        {isLoading ? <Loading /> : !data?.items.length ? <Empty text="No payments match your filters." /> : (
+          <>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Payment</th><th>Amount</th><th>Issue</th><th>P(Retry)</th><th>P(Reminder)</th><th>Recommendation</th><th>Expected Value</th></tr>
+                </thead>
+                <tbody>
+                  {data.items.map(p => (
+                    <tr key={p.payment_id} className="clickable" onClick={() => navigate(`/app/payments/${p.payment_id}`)}>
+                      <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{p.payment_id}</td>
+                      <td style={{ fontWeight: 600 }}>{inr(p.amount)}</td>
+                      <td style={{ color: 'var(--text-secondary)' }}>{failureLabel(p.failure_reason)}</td>
+                      <td>{p.retry_prob != null ? pct(p.retry_prob) : '—'}</td>
+                      <td>{p.reminder_prob != null ? pct(p.reminder_prob) : '—'}</td>
+                      <td><span className={`badge ${ACTION_BADGE[p.recommended_action?.toLowerCase()] || 'badge-control'}`}>{actionLabel(p.recommended_action)}</span></td>
+                      <td style={{ fontWeight: 600 }}>{p.recommended_value != null ? inr(p.recommended_value) : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          </div>
+            <div className="pagination">
+              <span>Page {data.page} of {data.total_pages} ({data.total.toLocaleString()} payments)</span>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button disabled={page <= 1} onClick={() => setPage(p => p - 1)}>Previous</button>
+                <button disabled={page >= data.total_pages} onClick={() => setPage(p => p + 1)}>Next</button>
+              </div>
+            </div>
+          </>
         )}
       </div>
     </>

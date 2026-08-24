@@ -1,76 +1,67 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../services/api';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, ReferenceLine } from 'recharts';
-
-const fmt = (n: number) => `Rs.${(n / 100000).toFixed(1)}L`;
-const fmtFull = (n: number) => `Rs.${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+import { inr, inrFull } from '../utils/format';
+import { Loading, ErrorState } from '../components/States';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 export default function FinancialPage() {
-  const { data: mc, isLoading: mcLoading } = useQuery({ queryKey: ['monte-carlo'], queryFn: api.getMonteCarlo });
-  const { data: be, isLoading: beLoading } = useQuery({ queryKey: ['breakeven'], queryFn: api.getBreakeven });
-  const { data: rob, isLoading: robLoading } = useQuery({ queryKey: ['robustness'], queryFn: api.getRobustness });
+  const { data: mc, isLoading: mcL, error: mcE, refetch: mcR } = useQuery({ queryKey: ['monte-carlo'], queryFn: api.getMonteCarlo });
+  const { data: be, isLoading: beL } = useQuery({ queryKey: ['breakeven'], queryFn: api.getBreakeven });
+  const { data: rob, isLoading: robL, error: robE, refetch: robR } = useQuery({ queryKey: ['robustness'], queryFn: api.getRobustness });
 
-  if (mcLoading || beLoading || robLoading) {
-    return <div className="empty-state"><div className="skeleton" style={{ width: '100%', height: 400 }} /></div>;
-  }
-
-  const mcData = mc ? Object.entries(mc).map(([name, v]) => ({
-    name: name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-    mean: v.mean_net_revenue,
-    p5: v.p5,
-    p95: v.p95,
-    p_positive: v.prob_positive_net,
-  })) : [];
+  if (mcL || beL || robL) return <Loading text="Loading financial analysis..." />;
+  if (mcE || robE) return <ErrorState message="Unable to load financial data." onRetry={() => { mcR(); robR(); }} />;
 
   const rtMC = mc?.recoverytwin;
+  const mcData = mc ? Object.entries(mc).map(([k, v]) => ({
+    name: k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()), value: v.mean_net_revenue,
+  })) : [];
 
   return (
     <>
       <div className="page-header">
-        <h2>Financial Analysis</h2>
-        <p>Monte Carlo simulation, break-even analysis, and policy robustness</p>
+        <h2>Financial Impact</h2>
+        <p>Is the recovery policy profitable under real-world conditions?</p>
       </div>
 
-      {/* Monte Carlo Summary */}
       {rtMC && (
-        <div className="metrics-grid mb-24">
-          <div className="metric-card primary">
+        <div className="metrics-row mb-20">
+          <div className="metric-card accent">
             <div className="label">Expected Net Revenue</div>
-            <div className="value">{fmt(rtMC.mean_net_revenue)}</div>
-            <div className="sub">RecoveryTwin (500 simulations)</div>
+            <div className="value">{inr(rtMC.mean_net_revenue)}</div>
+            <div className="sub">Based on 500 financial simulations</div>
           </div>
           <div className="metric-card success">
-            <div className="label">P(Net Positive)</div>
+            <div className="label">Probability of Positive Outcome</div>
             <div className="value">{(rtMC.prob_positive_net * 100).toFixed(0)}%</div>
-            <div className="sub">Probability of positive outcome</div>
           </div>
           <div className="metric-card">
-            <div className="label">P5 — P95 Range</div>
-            <div className="value" style={{ fontSize: 18 }}>{fmt(rtMC.p5)} — {fmt(rtMC.p95)}</div>
-            <div className="sub">90% confidence interval</div>
+            <div className="label">90% Confidence Range</div>
+            <div className="value" style={{ fontSize: 18 }}>{inr(rtMC.p5)} — {inr(rtMC.p95)}</div>
+            <div className="sub">P5 to P95 outcomes</div>
           </div>
           <div className="metric-card">
-            <div className="label">Median</div>
-            <div className="value">{fmt(rtMC.median_net_revenue)}</div>
-            <div className="sub">50th percentile</div>
+            <div className="label">Median Outcome</div>
+            <div className="value">{inr(rtMC.median_net_revenue)}</div>
           </div>
         </div>
       )}
 
-      <div className="grid-2 mb-24">
-        {/* Monte Carlo Distribution */}
+      <div className="grid-2 mb-20">
+        {/* Monte Carlo */}
         <div className="card">
-          <div className="card-header"><h3>Monte Carlo — Net Revenue Distribution</h3></div>
+          <div className="card-header"><h3>Financial Risk Simulation</h3></div>
           <div className="card-body">
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={mcData} margin={{ left: 20, right: 20 }}>
-                <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-20} textAnchor="end" height={60} />
-                <YAxis tickFormatter={(v: number) => fmt(v)} tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(v: number) => fmtFull(v)} />
-                <Bar dataKey="mean" radius={[4, 4, 0, 0]}>
-                  {mcData.map((_, i) => (
-                    <Cell key={i} fill={i === 2 ? '#2563eb' : '#94a3b8'} />
-                  ))}
+            <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12 }}>
+              Distribution of net recovery across 500 simulated scenarios. Higher bars mean more likely outcomes.
+            </p>
+            <ResponsiveContainer width="100%" height={240}>
+              <BarChart data={mcData} margin={{ left: 10, right: 10 }}>
+                <XAxis dataKey="name" tick={{ fontSize: 9 }} angle={-15} textAnchor="end" height={50} />
+                <YAxis tickFormatter={(v: number) => inr(v)} tick={{ fontSize: 10 }} />
+                <Tooltip formatter={(v: number) => inrFull(v)} />
+                <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                  {mcData.map((_, i) => <Cell key={i} fill={i === 2 ? '#2563eb' : '#cbd5e1'} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -81,19 +72,17 @@ export default function FinancialPage() {
         <div className="card">
           <div className="card-header"><h3>Break-Even Analysis</h3></div>
           <div className="card-body">
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
-              Maximum intervention cost before RecoveryTwin loses to doing nothing
+            <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 14 }}>
+              Maximum intervention cost before RecoveryTwin stops being more profitable than doing nothing.
             </p>
             {be && be.map(b => (
-              <div key={b.action} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid var(--border-light)' }}>
-                <span style={{ fontWeight: 600, textTransform: 'capitalize' }}>
-                  {b.action === 1 ? 'Retry' : b.action === 2 ? 'Reminder' : 'Alternative Method'}
-                </span>
+              <div key={b.action} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--border-light)' }}>
+                <span style={{ fontWeight: 600 }}>{b.action === 1 ? 'Retry' : b.action === 2 ? 'Reminder' : 'Alt Method'}</span>
                 <span style={{ fontWeight: 700, color: 'var(--accent)' }}>Rs.{b.breakeven_cost.toFixed(2)}</span>
               </div>
             ))}
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 12 }}>
-              Current costs: Retry Rs.0.50, Reminder Rs.1.00, Alternative Rs.2.50
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 12 }}>
+              Current costs: Retry Rs.0.50, Reminder Rs.1.00, Alt Method Rs.2.50 — well below break-even.
             </p>
           </div>
         </div>
@@ -101,78 +90,57 @@ export default function FinancialPage() {
 
       {/* Robustness */}
       {rob && (
-        <div className="grid-2 mb-24">
+        <div className="grid-2">
           <div className="card">
             <div className="card-header"><h3>Policy Robustness</h3></div>
             <div className="card-body">
-              <div style={{ marginBottom: 20 }}>
-                <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>
-                  RecoveryTwin beats Do Nothing
-                </div>
+              <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 16 }}>
+                How often does RecoveryTwin outperform simpler strategies across all tested conditions?
+              </p>
+              <div style={{ marginBottom: 18 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>RecoveryTwin vs. Doing Nothing</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ flex: 1, height: 8, background: 'var(--border-light)', borderRadius: 4, overflow: 'hidden' }}>
-                    <div style={{ width: `${(rob.robustness.vs_baseline || 0) * 100}%`, height: '100%', background: 'var(--success)', borderRadius: 4 }} />
+                  <div style={{ flex: 1, height: 10, background: 'var(--border-light)', borderRadius: 5, overflow: 'hidden' }}>
+                    <div style={{ width: `${(rob.robustness.vs_baseline || 0) * 100}%`, height: '100%', background: 'var(--success)', borderRadius: 5 }} />
                   </div>
-                  <span style={{ fontWeight: 700, fontSize: 16 }}>{((rob.robustness.vs_baseline || 0) * 100).toFixed(0)}%</span>
+                  <span style={{ fontWeight: 700, fontSize: 18 }}>{((rob.robustness.vs_baseline || 0) * 100).toFixed(0)}%</span>
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
-                  {rob.robustness.n_beats_baseline || 0}/{rob.robustness.n_scenarios || 0} scenarios
-                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>{rob.robustness.n_beats_baseline || 0}/{rob.robustness.n_scenarios || 0} scenarios</div>
               </div>
               <div>
-                <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>
-                  RecoveryTwin beats Max Probability
-                </div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>RecoveryTwin vs. Max Probability</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ flex: 1, height: 8, background: 'var(--border-light)', borderRadius: 4, overflow: 'hidden' }}>
-                    <div style={{ width: `${(rob.robustness.vs_max_prob || 0) * 100}%`, height: '100%', background: 'var(--warning)', borderRadius: 4 }} />
+                  <div style={{ flex: 1, height: 10, background: 'var(--border-light)', borderRadius: 5, overflow: 'hidden' }}>
+                    <div style={{ width: `${(rob.robustness.vs_max_prob || 0) * 100}%`, height: '100%', background: 'var(--warning)', borderRadius: 5 }} />
                   </div>
-                  <span style={{ fontWeight: 700, fontSize: 16 }}>{((rob.robustness.vs_max_prob || 0) * 100).toFixed(0)}%</span>
+                  <span style={{ fontWeight: 700, fontSize: 18 }}>{((rob.robustness.vs_max_prob || 0) * 100).toFixed(0)}%</span>
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
-                  {rob.robustness.n_beats_max_prob || 0}/{rob.robustness.n_scenarios || 0} scenarios
-                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>{rob.robustness.n_beats_max_prob || 0}/{rob.robustness.n_scenarios || 0} scenarios</div>
               </div>
             </div>
           </div>
 
           <div className="card">
-            <div className="card-header"><h3>Worst Case Analysis</h3></div>
+            <div className="card-header"><h3>Worst Case</h3></div>
             <div className="card-body">
+              <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 14 }}>
+                The scenario where RecoveryTwin performs the poorest.
+              </p>
               {rob.worst_case && (
-                <>
-                  <div style={{ marginBottom: 16 }}>
-                    <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>Scenario</div>
-                    <div style={{ fontWeight: 700, fontSize: 16 }}>{rob.worst_case.scenario?.replace(/_/g, ' ') || '—'}</div>
-                    <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{rob.worst_case.description}</div>
-                  </div>
-                  <table>
-                    <tbody>
-                      <tr>
-                        <td style={{ color: 'var(--text-secondary)' }}>Net Revenue</td>
-                        <td style={{ fontWeight: 700 }}>{fmtFull(rob.worst_case.net_revenue || 0)}</td>
-                      </tr>
-                      <tr>
-                        <td style={{ color: 'var(--text-secondary)' }}>Incremental vs Do Nothing</td>
-                        <td style={{ fontWeight: 700, color: (rob.worst_case.incremental_over_do_nothing || 0) > 0 ? 'var(--success)' : 'var(--danger)' }}>
-                          {rob.worst_case.incremental_over_do_nothing > 0 ? '+' : ''}{fmtFull(rob.worst_case.incremental_over_do_nothing || 0)}
-                        </td>
-                      </tr>
-                      <tr>
-                        <td style={{ color: 'var(--text-secondary)' }}>Policy Regret</td>
-                        <td>{((rob.worst_case.policy_regret || 0) * 100).toFixed(1)}%</td>
-                      </tr>
-                      <tr>
-                        <td style={{ color: 'var(--text-secondary)' }}>Still Profitable?</td>
-                        <td>
-                          <span className={`badge ${rob.worst_case.beats_do_nothing ? 'badge-success' : 'badge-danger'}`}>
-                            {rob.worst_case.beats_do_nothing ? 'Yes' : 'No'}
-                          </span>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </>
+                <table>
+                  <tbody>
+                    <tr><td style={{ color: 'var(--text-secondary)' }}>Scenario</td><td style={{ fontWeight: 700 }}>{(rob.worst_case.scenario || '').replace(/_/g, ' ')}</td></tr>
+                    <tr><td style={{ color: 'var(--text-secondary)' }}>Net Revenue</td><td style={{ fontWeight: 700 }}>{inr(rob.worst_case.net_revenue || 0)}</td></tr>
+                    <tr><td style={{ color: 'var(--text-secondary)' }}>vs. Doing Nothing</td>
+                      <td style={{ fontWeight: 700, color: (rob.worst_case.incremental_over_do_nothing || 0) > 0 ? 'var(--success)' : 'var(--danger)' }}>
+                        {(rob.worst_case.incremental_over_do_nothing || 0) > 0 ? '+' : ''}{inr(rob.worst_case.incremental_over_do_nothing || 0)}
+                      </td>
+                    </tr>
+                    <tr><td style={{ color: 'var(--text-secondary)' }}>Still Profitable?</td>
+                      <td><span className={`badge ${rob.worst_case.beats_do_nothing ? 'badge-success' : 'badge-danger'}`}>{rob.worst_case.beats_do_nothing ? 'Yes' : 'No'}</span></td>
+                    </tr>
+                  </tbody>
+                </table>
               )}
             </div>
           </div>
