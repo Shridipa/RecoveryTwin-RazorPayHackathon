@@ -1,0 +1,23 @@
+{
+  "n_customers": 5000,
+  "n_merchants": 500,
+  "n_transactions": 50000,
+  "recovery_rate": 0.30802,
+  "treatment_distribution": {
+    "control": 6007,
+    "retry": 11695,
+    "reminder": 16512,
+    "alternative_method": 15786
+  },
+  "treatment_pct": {
+    "control": 0.12014,
+    "retry": 0.2339,
+    "reminder": 0.33024,
+    "alternative_method": 0.31572
+  },
+  "revenue_at_risk": 68108090.59,
+  "revenue_recovered": 19768498.25,
+  "mean_recovery_time": 4.098609181221999,
+  "mean_intervention_cost": 1.7177676000000002,
+  "seed": 42
+}

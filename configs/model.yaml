@@ -1,0 +1,55 @@
+# RecoveryTwin Model Configuration
+random_seed: 42
+
+baselines:
+  logistic_regression:
+    max_iter: 1000
+    C: 1.0
+    solver: "lbfgs"
+  random_forest:
+    n_estimators: 200
+    max_depth: 12
+    min_samples_leaf: 20
+    random_seed: 42
+
+tree_models:
+  xgboost:
+    n_estimators: 300
+    max_depth: 6
+    learning_rate: 0.05
+    subsample: 0.8
+    colsample_bytree: 0.8
+    min_child_weight: 5
+    random_seed: 42
+  lightgbm:
+    n_estimators: 300
+    max_depth: 6
+    learning_rate: 0.05
+    subsample: 0.8
+    colsample_bytree: 0.8
+    min_child_samples: 20
+    random_seed: 42
+
+calibration:
+  methods:
+    - "none"
+    - "sigmoid"
+    - "isotonic"
+  cv_folds: 5
+
+evaluation_metrics:
+  - accuracy
+  - precision
+  - recall
+  - f1
+  - roc_auc
+  - pr_auc
+  - brier_score
+  - log_loss
+  - ece
+  - calibration_slope
+  - calibration_intercept
+
+propensity:
+  model: "multiclass_logistic"
+  features: "pretreatment_only"

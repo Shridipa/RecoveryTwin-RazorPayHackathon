@@ -1,0 +1,74 @@
+# RecoveryTwin Data Configuration
+random_seed: 42
+
+dataset:
+  n_customers: 5000
+  n_merchants: 500
+  n_transactions: 50000
+
+temporal_split:
+  train_start: "2024-01-01"
+  train_end: "2024-08-31"
+  validation_start: "2024-09-01"
+  validation_end: "2024-10-31"
+  test_start: "2024-11-01"
+  test_end: "2024-12-31"
+
+interventions:
+  0: "control"
+  1: "retry"
+  2: "reminder"
+  3: "alternative_method"
+
+target_distribution:
+  control_pct: 0.09
+  retry_pct: 0.29
+  reminder_pct: 0.30
+  alternative_pct: 0.32
+
+feature_groups:
+  merchant:
+    - merchant_id
+    - merchant_category
+    - merchant_size
+    - merchant_age
+    - merchant_success_rate
+    - merchant_avg_ticket
+  customer:
+    - customer_id
+    - customer_age_bucket
+    - customer_tenure
+    - customer_transaction_count
+    - customer_success_rate
+    - customer_avg_amount
+    - customer_recency
+    - customer_frequency
+    - customer_monetary_value
+  payment:
+    - payment_id
+    - timestamp
+    - amount
+    - payment_method
+    - device
+    - network
+    - bank
+    - transaction_type
+    - failure_reason
+  behavioral:
+    - attempt_count
+    - hours_since_failure
+    - previous_failures
+    - previous_recoveries
+    - customer_activity
+  treatment:
+    - intervention
+  outcome:
+    - recovered
+    - recovery_time_hours
+    - revenue_recovered
+    - intervention_cost
+
+paths:
+  raw: "data/raw"
+  synthetic: "data/synthetic/debug"
+  processed: "data/processed/debug"

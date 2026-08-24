@@ -1,0 +1,33 @@
+# RecoveryTwin Policy Configuration
+
+intervention_costs:
+  control: 0.0
+  retry: 0.50
+  reminder: 1.00
+  alternative_method: 2.50
+
+limits:
+  max_retry_attempts: 3
+  max_total_interventions: 5
+  customer_fatigue_threshold: 3
+  cooldown_hours: 24
+
+escalation_rules:
+  retry_to_reminder: true
+  reminder_to_alternative: true
+  max_escalation_level: 2
+
+stopping_rules:
+  stop_on_recovery: true
+  stop_after_max_attempts: true
+  stop_on_fatigue: true
+
+compliance:
+  opt_out_honored: true
+  respect_cooldown: true
+  audit_all_decisions: true
+
+financial:
+  currency: "INR"
+  min_transaction_amount: 1.0
+  max_transaction_amount: 500000.0
