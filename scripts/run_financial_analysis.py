@@ -61,7 +61,7 @@ def main():
     print(f"[{step}/{steps_total}] Loading validated data ...", end=" ")
     data_dir = Path("data/processed/debug")
     if not (data_dir / "train.parquet").exists():
-        print("FAIL — data not found. Run generate_and_validate.py first.")
+        print("FAIL — data not found. Run generate_dataset.py first.")
         sys.exit(1)
 
     train_df = pd.read_parquet(data_dir / "train.parquet")

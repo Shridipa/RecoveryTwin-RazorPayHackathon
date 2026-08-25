@@ -105,7 +105,7 @@ def main():
     # Load data
     data_dir = Path("data/processed/debug")
     if not (data_dir / "train.parquet").exists():
-        print("[FAIL] Processed data not found. Run generate_and_validate.py first.")
+        print("[FAIL] Processed data not found. Run generate_dataset.py first.")
         sys.exit(1)
 
     train_df = pd.read_parquet(data_dir / "train.parquet")

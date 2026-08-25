@@ -21,7 +21,7 @@ def main():
     # Load data
     data_path = Path("data/synthetic/debug/transactions.parquet")
     if not data_path.exists():
-        print("[FAIL] Data not found. Run generate_and_validate.py first.")
+        print("[FAIL] Data not found. Run generate_dataset.py first.")
         sys.exit(1)
 
     df = pd.read_parquet(data_path)
