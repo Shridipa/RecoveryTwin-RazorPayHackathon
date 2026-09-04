@@ -14,7 +14,6 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 
 from backend.app.config import settings
@@ -44,6 +43,7 @@ app = FastAPI(
 # CORS — allow frontend origins from env or any *.up.railway.app
 import os as _os
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 
 class _CORSMiddleware(BaseHTTPMiddleware):
     """Permissive CORS that allows any origin matching the allowlist."""
@@ -71,12 +71,28 @@ class _CORSMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request, call_next):
         origin = request.headers.get("origin", "")
+        
+        # Handle preflight requests
+        if request.method == "OPTIONS":
+            if self._is_allowed(origin):
+                return Response(
+                    status_code=200,
+                    headers={
+                        "Access-Control-Allow-Origin": origin,
+                        "Access-Control-Allow-Credentials": "true",
+                        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+                        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+                    }
+                )
+            return Response(status_code=200)
+        
+        # Handle actual requests
         response = await call_next(request)
         if self._is_allowed(origin):
             response.headers["Access-Control-Allow-Origin"] = origin
             response.headers["Access-Control-Allow-Credentials"] = "true"
-            response.headers["Access-Control-Allow-Methods"] = "*"
-            response.headers["Access-Control-Allow-Headers"] = "*"
+            response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+            response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
         return response
 
 app.add_middleware(_CORSMiddleware)
@@ -98,3 +114,4 @@ async def root():
         "docs": "/docs",
         "status": "healthy" if data_service.is_loaded else "loading",
     }
+
