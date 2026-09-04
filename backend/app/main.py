@@ -41,22 +41,45 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — build allowed origins from env + hardcoded defaults
-_cors_origins = [
-    settings.FRONTEND_ORIGIN,
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
-if settings.CORS_ORIGINS:
-    _cors_origins.extend(o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip())
+# CORS — allow frontend origins from env or any *.up.railway.app
+import os as _os
+from starlette.middleware.base import BaseHTTPMiddleware
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=_cors_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+class _CORSMiddleware(BaseHTTPMiddleware):
+    """Permissive CORS that allows any origin matching the allowlist."""
+    _EXACT = {
+        settings.FRONTEND_ORIGIN,
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    }
+
+    @classmethod
+    def _extra_origins(cls):
+        extra = _os.getenv("CORS_ORIGINS", "")
+        return {o.strip() for o in extra.split(",") if o.strip()}
+
+    @classmethod
+    def _is_allowed(cls, origin: str) -> bool:
+        if origin in cls._EXACT:
+            return True
+        if origin in cls._extra_origins():
+            return True
+        # Allow any *.up.railway.app origin
+        if origin.endswith(".up.railway.app"):
+            return True
+        return False
+
+    async def dispatch(self, request, call_next):
+        origin = request.headers.get("origin", "")
+        response = await call_next(request)
+        if self._is_allowed(origin):
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers["Access-Control-Allow-Methods"] = "*"
+            response.headers["Access-Control-Allow-Headers"] = "*"
+        return response
+
+app.add_middleware(_CORSMiddleware)
 
 # Register routes
 app.include_router(health.router, prefix="/api")
