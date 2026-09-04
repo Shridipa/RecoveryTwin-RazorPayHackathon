@@ -12,6 +12,7 @@ class Settings:
     CONFIGS_DIR = PROJECT_ROOT / "configs"
 
     FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")
+    CORS_ORIGINS = os.getenv("CORS_ORIGINS", "")  # comma-separated extra origins
     HOST = os.getenv("HOST", "0.0.0.0")
     PORT = int(os.getenv("PORT", "8000"))
     DEBUG = os.getenv("DEBUG", "true").lower() == "true"

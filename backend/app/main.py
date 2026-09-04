@@ -41,10 +41,18 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS
+# CORS — build allowed origins from env + hardcoded defaults
+_cors_origins = [
+    settings.FRONTEND_ORIGIN,
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+if settings.CORS_ORIGINS:
+    _cors_origins.extend(o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip())
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.FRONTEND_ORIGIN, "http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
