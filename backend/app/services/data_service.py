@@ -153,8 +153,10 @@ def _demo_monte_carlo() -> Dict[str, Any]:
             "median_net_revenue": round(float(np.median(samples)), 0),
             "p5": round(float(np.percentile(samples, 5)), 0),
             "p25": round(float(np.percentile(samples, 25)), 0),
+            "p50": round(float(np.percentile(samples, 50)), 0),
             "p75": round(float(np.percentile(samples, 75)), 0),
             "p95": round(float(np.percentile(samples, 95)), 0),
+            "prob_positive_net": round(float((samples > 0).mean()), 4),
         }
     return {
         "recoverytwin": _mc(3822601, 300000),
@@ -182,6 +184,7 @@ def _demo_robustness() -> Dict[str, Any]:
             "scenario": "ADVERSE_COMBINED",
             "net_revenue": 2850000,
             "incremental": 1027074,
+            "incremental_over_do_nothing": 1027074,
             "beats_do_nothing": True,
         },
     }
